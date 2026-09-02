@@ -37,13 +37,6 @@ def get_customers() -> list[UUID]:
             return [row[0] for row in cur.fetchall()]
 
 
-def get_coupons() -> list[UUID]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM coupons")
-            return [row[0] for row in cur.fetchall()]
-
-
 def create_customer_groups(
     customers: list[UUID],
 ) -> tuple[
@@ -106,7 +99,6 @@ def choose_customer(
 
 def generate_orders(
     customers: list[UUID],
-    coupons: list[UUID],
     total_orders: int = TOTAL_ORDERS,
     batch_size: int = BATCH_SIZE,
 ):
@@ -124,7 +116,9 @@ def generate_orders(
             rare=rare,
         )
 
-        coupon_id = random.choice(coupons) if random.random() < 0.25 else None
+        # Coupons are assigned in a separate post-order_items step
+        # so we can validate minimum_order_amount against the real subtotal.
+        coupon_id = None
 
         status = random.choices(
             ORDER_STATUSES,
@@ -181,16 +175,11 @@ def save_order_batch(
 
 def seed_orders() -> None:
     customers = get_customers()
-    coupons = get_coupons()
 
     if not customers:
         raise RuntimeError("No customers found.")
 
-    if not coupons:
-        raise RuntimeError("No coupons found.")
-
     print(f"Found {len(customers):,} customers")
-    print(f"Found {len(coupons):,} coupons")
     print(f"Generating {TOTAL_ORDERS:,} orders...")
 
     total_inserted = 0
@@ -198,7 +187,6 @@ def seed_orders() -> None:
     for batch_number, batch in enumerate(
         generate_orders(
             customers=customers,
-            coupons=coupons,
         ),
         start=1,
     ):
@@ -212,4 +200,4 @@ def seed_orders() -> None:
             f"({total_inserted:,}/{TOTAL_ORDERS:,})"
         )
 
-    print(f"Done! Inserted " f"{total_inserted:,} orders.")
+    print(f"Done! Inserted {total_inserted:,} orders.")

@@ -1,4 +1,5 @@
 from generator.categories import seed_categories
+from generator.coupon_assignment import seed_coupon_assignment
 from generator.coupons import seed_coupons
 from generator.customers import seed_customers
 from generator.order_items import seed_order_items
@@ -32,7 +33,10 @@ def main():
     print("Generating order items...")
     seed_order_items()
 
-    print("Genrating payments...")
+    print("Assigning coupons to eligible orders...")
+    seed_coupon_assignment()
+
+    print("Generating payments...")
     seed_payments()
 
     print("Generating shipments...")

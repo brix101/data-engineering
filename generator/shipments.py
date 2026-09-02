@@ -17,21 +17,10 @@ CARRIERS = [
     "2GO",
 ]
 
-SHIPMENT_STATUSES = [
-    "pending",
-    "shipped",
-    "in_transit",
-    "delivered",
-    "lost",
-]
-
-SHIPMENT_STATUS_WEIGHTS = [
-    5,
-    10,
-    15,
-    69,
-    1,
-]
+# Probability that a `processing` order has actually generated a
+# shipment row yet (warehouse preparing). Non-processing eligible
+# statuses always produce a shipment.
+PROCESSING_SHIPMENT_PROBABILITY = 0.40
 
 
 def get_orders(batch_size: int = BATCH_SIZE):
@@ -41,7 +30,6 @@ def get_orders(batch_size: int = BATCH_SIZE):
                 SELECT id, status, created_at
                 FROM orders
                 WHERE status IN (
-                    'paid',
                     'processing',
                     'shipped',
                     'delivered'
@@ -58,28 +46,56 @@ def get_orders(batch_size: int = BATCH_SIZE):
                 yield rows
 
 
-def generate_shipments(order_batch):
-    for order_id, order_status, order_created_at in order_batch:
+def derive_shipment_status(order_status: str) -> str:
+    """
+    Derive a shipment status that is consistent with the parent
+    order's lifecycle.
+    """
 
-        shipment_status = random.choices(
-            SHIPMENT_STATUSES,
-            weights=SHIPMENT_STATUS_WEIGHTS,
+    if order_status == "processing":
+        return random.choices(
+            ["pending", "shipped"],
+            weights=[85, 15],
             k=1,
         )[0]
+
+    if order_status == "shipped":
+        return random.choices(
+            ["shipped", "in_transit", "lost"],
+            weights=[55, 44, 1],
+            k=1,
+        )[0]
+
+    if order_status == "delivered":
+        # A delivered order cannot correspond to a lost shipment.
+        return "delivered"
+
+    return "pending"
+
+
+def generate_shipments(order_batch):
+    for order_id, order_status, order_created_at in order_batch:
+        # Not every processing order has moved to the shipment stage yet.
+        if (
+            order_status == "processing"
+            and random.random() >= PROCESSING_SHIPMENT_PROBABILITY
+        ):
+            continue
+
+        shipment_status = derive_shipment_status(order_status)
 
         shipped_at = None
         delivered_at = None
 
-        if shipment_status in (
-            "shipped",
-            "in_transit",
-            "delivered",
-            "lost",
-        ):
-            shipped_at = order_created_at + timedelta(hours=random.randint(2, 72))
+        if shipment_status in ("shipped", "in_transit", "delivered", "lost"):
+            shipped_at = order_created_at + timedelta(
+                hours=random.randint(2, 72),
+            )
 
             if shipment_status == "delivered":
-                delivered_at = shipped_at + timedelta(days=random.randint(1, 7))
+                delivered_at = shipped_at + timedelta(
+                    days=random.randint(1, 7),
+                )
 
         yield (
             order_id,
@@ -111,6 +127,9 @@ def seed_shipments():
 
     for order_batch in get_orders():
         batch = list(generate_shipments(order_batch))
+
+        if not batch:
+            continue
 
         save_shipment_batch(batch)
 
