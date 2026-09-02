@@ -1,3 +1,6 @@
+[tool.ruff.lint]
+ignore = ["SIM117"]
+
 [tool.pyright]
 include = ["generator"]
 extraPaths = ["."]

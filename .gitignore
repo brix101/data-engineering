@@ -38,4 +38,4 @@ htmlcov/
 .DS_Store
 
 # Jupyter
-.ipynb_checkpoints/
+.ipynb_checkpointsc

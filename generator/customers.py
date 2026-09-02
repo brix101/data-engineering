@@ -1,58 +1,65 @@
+import random
 from datetime import timezone
 
 from faker import Faker
 
-from generator.db import get_connection
+from generator.db import copy_rows
 
 fake = Faker()
 
 
-def generate_customers(count: int):
-    customers = []
+def generate_customers(count: int, batch_size: int = 10_000):
+    for start in range(0, count, batch_size):
+        batch_count = min(batch_size, count - start)
 
-    for _ in range(count):
-        customers.append(
-            {
-                "email": fake.unique.email(),
-                "first_name": fake.first_name(),
-                "last_name": fake.last_name(),
-                "city": fake.city(),
-                "created_at": fake.date_time_between(
-                    start_date="-2y", end_date="now", tzinfo=timezone.utc
-                ),
-            }
+        batch = []
+
+        for i in range(batch_count):
+            batch.append(
+                (
+                    f"customer_{start + i}@example.com",
+                    fake.first_name(),
+                    fake.last_name(),
+                    fake.city(),
+                    fake.date_time_between(
+                        start_date="-2y",
+                        end_date="now",
+                        tzinfo=timezone.utc,
+                    ),
+                )
+            )
+
+        yield batch
+
+
+def save_customer_batch(batch):
+    copy_rows(
+        table="customers",
+        columns=[
+            "email",
+            "first_name",
+            "last_name",
+            "city",
+            "created_at",
+        ],
+        rows=batch,
+    )
+
+
+def seed_customers(count: int, batch_size: int = 10_000):
+    inserted = 0
+
+    for batch_number, batch in enumerate(
+        generate_customers(count, batch_size),
+        start=1,
+    ):
+        save_customer_batch(batch)
+
+        inserted += len(batch)
+        percent = inserted / count * 100
+
+        print(
+            f"Inserted batch {batch_number}: "
+            f"{len(batch):,} customers "
+            f"({inserted:,}/{count:,}, {percent:.1f}%)"
         )
-
-    return customers
-
-
-def save_customers(customers: list[dict]) -> None:
-    query = """
-        INSERT INTO customers (
-            email,
-            first_name,
-            last_name,
-            city,
-            created_at
-        )
-        VALUES (
-            %(email)s,
-            %(first_name)s,
-            %(last_name)s,
-            %(city)s,
-            %(created_at)s
-        )
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.executemany(query, customers)
-
-        conn.commit()
-
-
-if __name__ == "__main__":
-    customers = generate_customers(100)
-    save_customers(customers)
-
-    print(f"Inserted {len(customers)} customers")
