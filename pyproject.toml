@@ -1,0 +1,5 @@
+[tool.pyright]
+include = ["generator"]
+extraPaths = ["."]
+venvPath = "."
+venv = ".venv"
