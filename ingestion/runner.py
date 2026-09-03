@@ -178,12 +178,17 @@ def ingest_table(
             batch_counter += 1
             total += len(batch)
 
+            if partition_column is not None:
+                raise ValueError(
+                    f"Partition column is required for table '{table_name}'"
+                )
+
             partitions = group_by_partition(
                 batch,
-                schema.get_field_index(partition_column) if partition_column else -1,
+                schema.get_field_index(partition_column),
             )
 
-            for partition_key, writer in partitions.items():
+            for partition_key, rows in partitions.items():
                 writer = get_or_create_writer(
                     writers,
                     partition_key,
@@ -193,7 +198,7 @@ def ingest_table(
 
                 write_parquet_batch(
                     writer,
-                    batch,
+                    rows,
                     schema,
                     ingested_at,
                 )
