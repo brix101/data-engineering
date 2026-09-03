@@ -1,13 +1,15 @@
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from ingestion.extractor import extract_table
+from ingestion.entract import extract_table
 from ingestion.parquet import write_parquet_batch
 from ingestion.schemas import TABLE_SCHEMAS
+from ingestion.storage import upload_file
 from ingestion.validate import (
     validate_primary_key_not_null,
     validate_required_columns,
@@ -149,8 +151,9 @@ def ingest_table(
         ingested_at = datetime.now(timezone.utc)
         output_path = Path("data/parquet")
         output_path.mkdir(parents=True, exist_ok=True)
+        output_name = f"{table_name}.parquet"
 
-        output_file = output_path / f"{table_name}.parquet"
+        output_file = output_path / output_name
 
         with pq.ParquetWriter(output_file, schema=schema) as writer:
             for batch in extract_table(table_name):
@@ -159,6 +162,9 @@ def ingest_table(
 
                 write_parquet_batch(writer, batch, schema, ingested_at)
 
+        upload_file(output_file, "ecommerce-data", output_name)
+
+        os.remove(output_file)
         elapsed = time.perf_counter() - start
         logger.info("extracted %d rows from table '%s'", total, table_name)
         logger.info("extraction runtime: %.2fs", elapsed)

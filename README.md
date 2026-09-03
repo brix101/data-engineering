@@ -122,10 +122,10 @@ Instead of manually moving files around, create a Python application that ingest
 - [x] Create reusable ingest_table()
 - [x] Configure multiple tables
 - [x] Run ingestion from command line
-- [ ] Add ingested_at
-- [ ] Write extracted data to Parquet
-- [ ] Write Parquet to destination directory
-- [ ] Make ingestion repeatable/idempotent
+- [x] Add ingested_at
+- [x] Write extracted data to Parquet
+- [x] Write Parquet to destination directory
+- [x] Make ingestion repeatable/idempotent
 
 **Challenge**
 
