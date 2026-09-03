@@ -2,7 +2,7 @@
 ignore = ["SIM117"]
 
 [tool.pyright]
-include = ["generator"]
+include = ["generator", "ingestion"]
 extraPaths = ["."]
 venvPath = "."
 venv = ".venv"

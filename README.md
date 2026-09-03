@@ -101,17 +101,31 @@ Instead of manually moving files around, create a Python application that ingest
 
 **Tasks**
 
-- [ ] Design your project directory structure
-- [ ] Create an ingestion Python package
-- [ ] Read raw CSV/JSON files
-- [ ] Validate that expected files exist
-- [ ] Validate basic schemas
-- [ ] Add `ingested_at`
-- [ ] Add ingestion logging
-- [ ] Handle missing/corrupted files
-- [ ] Write ingested data to a destination directory
-- [ ] Make the ingestion process repeatable
-- [ ] Make it possible to run from the command line
+- [x] Design project directory structure
+- [x] Create ingestion Python package
+- [x] Connect to PostgreSQL
+- [x] Handle connection failures
+- [x] Proper connection cleanup
+- [x] Extract data in batches
+- [x] Configurable batch size
+- [x] Use server-side cursor
+- [x] Create generic table extractor
+- [x] Validate table exists
+- [x] Validate required columns
+- [x] Validate primary key is not NULL
+- [x] Validate primary key uniqueness
+- [x] Validate table isn't empty
+- [x] Add extraction logging
+- [x] Add extraction metadata
+- [x] Handle validation failures
+- [x] Handle extraction failures
+- [x] Create reusable ingest_table()
+- [x] Configure multiple tables
+- [x] Run ingestion from command line
+- [ ] Add ingested_at
+- [ ] Write extracted data to Parquet
+- [ ] Write Parquet to destination directory
+- [ ] Make ingestion repeatable/idempotent
 
 **Challenge**
 
