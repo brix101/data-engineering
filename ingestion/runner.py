@@ -1,13 +1,12 @@
 import logging
 import time
 from datetime import datetime, timezone
-from uuid import UUID
+from pathlib import Path
 
-import pyarrow as pa
 import pyarrow.parquet as pq
 
 from ingestion.extractor import extract_table
-from ingestion.parquet import write_parquet_file
+from ingestion.parquet import write_parquet_batch
 from ingestion.schemas import TABLE_SCHEMAS
 from ingestion.validate import (
     validate_primary_key_not_null,
@@ -23,6 +22,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
 
 TABLE_CONFIG = {
     "customers": {
@@ -147,17 +147,17 @@ def ingest_table(
     batch_counter = 0
     try:
         ingested_at = datetime.now(timezone.utc)
+        output_path = Path("data/parquet")
+        output_path.mkdir(parents=True, exist_ok=True)
 
-        for batch_number, batch in enumerate(extract_table(table_name), start=1):
-            batch_counter += 1
-            total += len(batch)
+        output_file = output_path / f"{table_name}.parquet"
 
-            write_parquet_file(
-                table_name,
-                batch,
-                schema,
-                ingested_at,
-            )
+        with pq.ParquetWriter(output_file, schema=schema) as writer:
+            for batch in extract_table(table_name):
+                batch_counter += 1
+                total += len(batch)
+
+                write_parquet_batch(writer, batch, schema, ingested_at)
 
         elapsed = time.perf_counter() - start
         logger.info("extracted %d rows from table '%s'", total, table_name)
@@ -175,9 +175,6 @@ def ingest_table(
 
 if __name__ == "__main__":
     for table_name, config in TABLE_CONFIG.items():
-        if table_name != "customers":
-            continue
-
         ingest_table(
             table_name,
             config["primary_key"],
