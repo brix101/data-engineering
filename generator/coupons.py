@@ -3,7 +3,7 @@ from datetime import timedelta, timezone
 
 from faker import Faker
 
-from generator.db import copy_rows
+from db import copy_rows
 
 fake = Faker()
 

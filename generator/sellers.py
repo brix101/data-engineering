@@ -2,7 +2,7 @@ from datetime import timezone
 
 from faker import Faker
 
-from generator.db import get_connection
+from db import get_connection
 
 fake = Faker()
 

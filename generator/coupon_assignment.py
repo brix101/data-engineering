@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from generator.db import get_connection
+from db import get_connection
 
 BATCH_SIZE = 10_000
 

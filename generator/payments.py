@@ -2,7 +2,7 @@ import random
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from generator.db import copy_rows, get_connection
+from db import copy_rows, get_connection
 
 TWO_PLACES = Decimal("0.01")
 ZERO = Decimal(0)

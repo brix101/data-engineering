@@ -1,7 +1,7 @@
 import random
 from uuid import UUID
 
-from generator.db import copy_rows, get_connection
+from db import copy_rows, get_connection
 
 TOTAL_ORDERS = 5_000_000
 BATCH_SIZE = 10_000

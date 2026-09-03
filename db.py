@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from typing import Any
 
 import psycopg
-from psycopg import sql
+from psycopg import OperationalError, sql
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -12,7 +12,11 @@ DATABASE_URL = os.getenv(
 
 
 def get_connection():
-    return psycopg.connect(DATABASE_URL)
+    try:
+        return psycopg.connect(DATABASE_URL)
+    except OperationalError as e:
+        print(f"[error] failed to connect to database: {e}")
+        raise
 
 
 def copy_rows(

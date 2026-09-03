@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timedelta, timezone
 
-from generator.db import copy_rows, get_connection
+from db import copy_rows, get_connection
 
 BATCH_SIZE = 10_000
 

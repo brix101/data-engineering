@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from faker import Faker
 
-from generator.db import copy_rows, get_connection
+from db import copy_rows, get_connection
 
 fake = Faker()
 

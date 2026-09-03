@@ -1,9 +1,8 @@
-import random
 from datetime import timezone
 
 from faker import Faker
 
-from generator.db import copy_rows
+from db import copy_rows
 
 fake = Faker()
 
