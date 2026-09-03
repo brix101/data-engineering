@@ -86,7 +86,7 @@ _You've already done this._
 You should be able to run something like:
 
 ```bash
-python generate.py
+python -m generator.main
 ```
 
 and get a complete dataset.
