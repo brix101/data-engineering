@@ -1,4 +1,5 @@
 import random
+import uuid
 from datetime import timedelta
 
 from faker import Faker
@@ -100,7 +101,7 @@ def generate_shipments(order_batch):
         yield (
             order_id,
             random.choice(CARRIERS),
-            f"TRK{fake.random_number(digits=12)}",
+            f"TRK{uuid.uuid4().hex[:16].upper()}",
             shipment_status,
             shipped_at,
             delivered_at,

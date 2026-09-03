@@ -1,3 +1,6 @@
+import time
+from datetime import timedelta
+
 from generator.categories import seed_categories
 from generator.coupon_assignment import seed_coupon_assignment
 from generator.coupons import seed_coupons
@@ -12,6 +15,8 @@ from generator.shipments import seed_shipments
 
 
 def main():
+    start_time = time.perf_counter()
+
     print("Generating customers...")
     seed_customers(1_000_000)
 
@@ -45,7 +50,8 @@ def main():
     print("Generating returns...")
     seed_returns()
 
-    print("Done!")
+    elapsed = time.perf_counter() - start_time
+    print(f"Done! Total runtime: {timedelta(seconds=int(elapsed))} ({elapsed:.2f}s)")
 
 
 if __name__ == "__main__":
