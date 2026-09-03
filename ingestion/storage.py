@@ -54,3 +54,22 @@ def upload_file(file_path: str | Path, bucket_name: str, object_name: str) -> No
     except ClientError:
         logger.exception("Failed to upload %s", file_path)
         raise
+
+
+def object_exists(bucket_name: str, object_name: str) -> bool:
+    """
+    Check if an object exists in an S3-compatible bucket.
+
+    :param bucket_name: Name of the bucket
+    :param object_name: Key of the object in the bucket
+    :return: True if the object exists, False otherwise
+    """
+    client = get_s3_client()
+    try:
+        client.head_object(Bucket=bucket_name, Key=object_name)
+        return True
+    except ClientError as exc:
+        error_code = exc.response["Error"].get("Code")
+        if error_code in ("404", "NoSuchKey"):
+            return False
+        raise

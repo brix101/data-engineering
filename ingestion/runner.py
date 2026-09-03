@@ -8,8 +8,14 @@ import pyarrow.parquet as pq
 
 from ingestion.entract import extract_table
 from ingestion.parquet import write_parquet_batch
+from ingestion.partition import (
+    build_object_key,
+    get_or_create_writer,
+    get_partition,
+    group_by_partition,
+)
 from ingestion.schemas import TABLE_SCHEMAS
-from ingestion.storage import upload_file
+from ingestion.storage import object_exists, upload_file
 from ingestion.validate import (
     validate_primary_key_not_null,
     validate_required_columns,
@@ -29,6 +35,7 @@ logger = logging.getLogger(__name__)
 TABLE_CONFIG = {
     "customers": {
         "primary_key": "id",
+        "partition_column": "created_at",
         "required_columns": [
             "id",
             "email",
@@ -40,14 +47,18 @@ TABLE_CONFIG = {
     },
     "sellers": {
         "primary_key": "id",
+        "partition_column": "created_at",
         "required_columns": ["id", "name", "created_at"],
     },
     "categories": {
         "primary_key": "id",
+        # No natural event time -> partition by ingested_at.
+        "partition_column": None,
         "required_columns": ["id", "name"],
     },
     "products": {
         "primary_key": "id",
+        "partition_column": "created_at",
         "required_columns": [
             "id",
             "seller_id",
@@ -60,6 +71,7 @@ TABLE_CONFIG = {
     },
     "coupons": {
         "primary_key": "id",
+        "partition_column": "starts_at",
         "required_columns": [
             "id",
             "code",
@@ -71,6 +83,7 @@ TABLE_CONFIG = {
     },
     "orders": {
         "primary_key": "id",
+        "partition_column": "created_at",
         "required_columns": [
             "id",
             "customer_id",
@@ -81,6 +94,8 @@ TABLE_CONFIG = {
     },
     "order_items": {
         "primary_key": "id",
+        # No natural event time -> partition by ingested_at.
+        "partition_column": None,
         "required_columns": [
             "id",
             "order_id",
@@ -92,6 +107,7 @@ TABLE_CONFIG = {
     },
     "payments": {
         "primary_key": "id",
+        "partition_column": "paid_at",
         "required_columns": [
             "id",
             "order_id",
@@ -102,6 +118,7 @@ TABLE_CONFIG = {
     },
     "shipments": {
         "primary_key": "id",
+        "partition_column": "shipped_at",
         "required_columns": [
             "id",
             "order_id",
@@ -112,6 +129,7 @@ TABLE_CONFIG = {
     },
     "returns": {
         "primary_key": "id",
+        "partition_column": "created_at",
         "required_columns": [
             "id",
             "order_item_id",
@@ -125,9 +143,13 @@ TABLE_CONFIG = {
 
 
 def ingest_table(
-    table_name: str, primary_key: str, required_columns: list[str]
+    table_name: str,
+    primary_key: str,
+    required_columns: list[str],
+    partition_column: str | None = None,
 ) -> None:
     start = time.perf_counter()
+    logger.info("Starting ingestion for table '%s'", table_name)
 
     try:
         validate_table_exists(table_name)
@@ -147,26 +169,44 @@ def ingest_table(
 
     total = 0
     batch_counter = 0
+    writers = {}
+
     try:
         ingested_at = datetime.now(timezone.utc)
-        output_path = Path("data/parquet")
-        output_path.mkdir(parents=True, exist_ok=True)
-        output_name = f"{table_name}.parquet"
 
-        output_file = output_path / output_name
+        for batch in extract_table(table_name):
+            batch_counter += 1
+            total += len(batch)
 
-        with pq.ParquetWriter(output_file, schema=schema) as writer:
-            for batch in extract_table(table_name):
-                batch_counter += 1
-                total += len(batch)
+            partitions = group_by_partition(
+                batch,
+                schema.get_field_index(partition_column) if partition_column else -1,
+            )
 
-                write_parquet_batch(writer, batch, schema, ingested_at)
+            for partition_key, writer in partitions.items():
+                writer = get_or_create_writer(
+                    writers,
+                    partition_key,
+                    table_name,
+                    schema,
+                )
 
-        upload_file(output_file, "ecommerce-data", output_name)
+                write_parquet_batch(
+                    writer,
+                    batch,
+                    schema,
+                    ingested_at,
+                )
 
-        os.remove(output_file)
+        # upload_file(output_file, "ecommerce-data", output_name)
+
+        # exists = object_exists("ecommerce-data", output_name)
+
+        # if exists:
+        #     logger.info("removing local Parquet file '%s'", output_file)
+        #     os.remove(output_file)
+
         elapsed = time.perf_counter() - start
-        logger.info("extracted %d rows from table '%s'", total, table_name)
         logger.info("extraction runtime: %.2fs", elapsed)
     except RuntimeError as exc:
         logger.error("Extraction failed for table '%s': %s", table_name, exc)
@@ -176,13 +216,19 @@ def ingest_table(
             batch_counter,
             total,
         )
-        return
+    finally:
+        for writer in writers.values():
+            writer.close()
 
 
 if __name__ == "__main__":
     for table_name, config in TABLE_CONFIG.items():
+        if table_name != "orders":  # Skip orders table for now
+            continue
+
         ingest_table(
             table_name,
             config["primary_key"],
             config["required_columns"],
+            config["partition_column"],
         )
