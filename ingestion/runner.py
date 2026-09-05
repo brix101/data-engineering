@@ -149,7 +149,9 @@ def ingest_table(
     partition_column: str | None = None,
 ) -> None:
     start = time.perf_counter()
-    logger.info("Starting ingestion for table '%s'", table_name)
+    logger.info(
+        "Ingesting table '%s' partitioned by '%s'", table_name, partition_column
+    )
 
     try:
         validate_table_exists(table_name)
@@ -178,15 +180,14 @@ def ingest_table(
             batch_counter += 1
             total += len(batch)
 
-            if partition_column is not None:
-                raise ValueError(
-                    f"Partition column is required for table '{table_name}'"
+            if partition_column is None:
+                # No natural event time -> bucket the whole batch by ingested_at.
+                partitions = {get_partition(ingested_at): batch}
+            else:
+                partitions = group_by_partition(
+                    batch,
+                    schema.get_field_index(partition_column),
                 )
-
-            partitions = group_by_partition(
-                batch,
-                schema.get_field_index(partition_column),
-            )
 
             for partition_key, rows in partitions.items():
                 writer = get_or_create_writer(
