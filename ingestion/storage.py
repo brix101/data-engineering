@@ -35,7 +35,9 @@ def ensure_bucket(client, bucket_name: str) -> None:
         raise
 
 
-def upload_file(file_path: str | Path, bucket_name: str, object_name: str) -> None:
+def upload_file(
+    client, bucket_name: str, file_path: str | Path, object_name: str
+) -> None:
     """
     Upload a file to an S3-compatible bucket (MinIO by default).
 
@@ -43,9 +45,6 @@ def upload_file(file_path: str | Path, bucket_name: str, object_name: str) -> No
     :param bucket_name: Name of the bucket to upload to
     :param object_name: Key of the object in the bucket
     """
-    client = get_s3_client()
-    ensure_bucket(client, bucket_name)
-
     logger.info("Uploading %s -> s3://%s/%s", file_path, bucket_name, object_name)
 
     try:
@@ -56,7 +55,7 @@ def upload_file(file_path: str | Path, bucket_name: str, object_name: str) -> No
         raise
 
 
-def object_exists(bucket_name: str, object_name: str) -> bool:
+def object_exists(client, bucket_name: str, object_name: str) -> bool:
     """
     Check if an object exists in an S3-compatible bucket.
 
@@ -64,7 +63,6 @@ def object_exists(bucket_name: str, object_name: str) -> bool:
     :param object_name: Key of the object in the bucket
     :return: True if the object exists, False otherwise
     """
-    client = get_s3_client()
     try:
         client.head_object(Bucket=bucket_name, Key=object_name)
         return True

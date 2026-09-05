@@ -15,7 +15,13 @@ from ingestion.partition import (
     group_by_partition,
 )
 from ingestion.schemas import TABLE_SCHEMAS
-from ingestion.storage import object_exists, upload_file
+from ingestion.storage import (
+    ensure_bucket,
+    get_s3_client,
+    object_exists,
+    upload_bucket_file,
+    upload_file,
+)
 from ingestion.validate import (
     validate_primary_key_not_null,
     validate_required_columns,
@@ -228,13 +234,29 @@ def ingest_table(
 
 
 if __name__ == "__main__":
-    for table_name, config in TABLE_CONFIG.items():
-        if table_name != "orders":  # Skip orders table for now
-            continue
+    # for table_name, config in TABLE_CONFIG.items():
+    #     if table_name != "orders":  # Skip orders table for now
+    #         continue
+    #
+    #     logger.info(config)
+    #
+    #     ingest_table(
+    #         table_name,
+    #         config["primary_key"],
+    #         config["required_columns"],
+    #         config["partition_column"],
+    #     )
 
-        ingest_table(
-            table_name,
-            config["primary_key"],
-            config["required_columns"],
-            config["partition_column"],
-        )
+    bucket_name = "ecommerce-data"
+    client = get_s3_client()
+    ensure_bucket(client, bucket_name)
+
+    for file_path in Path("data/parquet").rglob("*.parquet"):
+        relative_path = file_path.relative_to("data/parquet")
+        object_name = relative_path.as_posix()
+
+        upload_file(client, bucket_name, file_path, object_name)
+
+        if object_exists(client, bucket_name, object_name):
+            logger.info("removing '%s'", file_path)
+            file_path.unlink()
