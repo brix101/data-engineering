@@ -4,120 +4,89 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ingestion.entract import extract_table
-from ingestion.parquet import write_parquet_batch
-from ingestion.partition import (
-    get_or_create_writer,
-    get_partition,
-    group_by_partition,
-)
+from ingestion.partition import PartitionWriterManager
 from ingestion.schemas import TABLE_SCHEMAS
-from ingestion.validate import (
-    validate_primary_key_not_null,
-    validate_required_columns,
-    validate_table_exists,
-    validate_table_not_empty,
-    validate_unique_primary_key,
-)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-)
+from ingestion.validate import Validator
 
 logger = logging.getLogger(__name__)
 
 
-def ingest_table(
-    table_name: str,
-    primary_key: str,
-    required_columns: list[str],
-    partition_column: str | None = None,
-) -> set[Path]:
+validate = Validator()
+pa_manager = PartitionWriterManager()
+
+
+def ingest_table(table_name: str, config: dict) -> set[Path]:
     """
     Ingest a table from the source database, validate it, partition it, and write it to Parquet files.
     """
 
     start = time.perf_counter()
-    logger.info(
-        "Ingesting table '%s' partitioned by '%s'", table_name, partition_column
-    )
+    logger.info("ingesting table '%s'", table_name)
 
     try:
-        validate_table_exists(table_name)
-        validate_required_columns(table_name, required_columns)
-        validate_primary_key_not_null(table_name, primary_key)
-        validate_unique_primary_key(table_name, primary_key)
-        validate_table_not_empty(table_name)
+        table = validate.get_table(table_name)
+        table.required_columns(config["required_columns"])
+        table.primary_key_not_null(config["primary_key"])
+        table.unique_primary_key(config["primary_key"])
+        table.not_empty()
 
     except ValueError as exc:
-        logger.error("Validation failed for table '%s': %s", table_name, exc)
+        logger.error("validation failed: %s", exc)
         return set()
 
     schema = TABLE_SCHEMAS.get(table_name)
     if schema is None:
-        logger.error("No schema defined for table '%s'", table_name)
+        logger.error("no schema defined")
         return set()
 
-    total = 0
-    batch_counter = 0
-    writers = {}
-    generated_files = set()
-    success = False
+    batches_processed = 0
+    rows_processed = 0
+    failed_batch: int | None = None
 
     try:
+        generated_files: set[Path] = set()
         ingested_at = datetime.now(timezone.utc)
 
-        for batch in extract_table(table_name):
-            batch_counter += 1
-            total += len(batch)
+        column = config.get("partition_column")
+        partition_index = schema.get_field_index(column) if column else None
 
-            # Simulate a random batch failure for testing failure handling.
-            # if random.random() < 0.1:
-            #     raise RuntimeError(f"simulated random failure at batch {batch_counter}")
+        for batch_number, batch in enumerate(extract_table(table_name), start=1):
+            try:
+                # Simulate a random batch failure for testing failure handling.
+                # if random.random() < 0.1:
+                #     raise RuntimeError("simulated random failure")
 
-            if partition_column is None:
-                # No natural event time -> bucket the whole batch by ingested_at.
-                partitions = {get_partition(ingested_at): batch}
-            else:
-                partitions = group_by_partition(
-                    batch,
-                    schema.get_field_index(partition_column),
-                )
+                partitions = pa_manager.partition(batch, ingested_at, partition_index)
 
-            for partition_key, rows in partitions.items():
-                writer = get_or_create_writer(
-                    writers,
-                    partition_key,
-                    table_name,
-                    schema,
-                )
+                for partition_key, rows in partitions.items():
+                    handler = pa_manager.get_writer(partition_key, table_name, schema)
 
-                write_parquet_batch(
-                    writer,
-                    rows,
-                    schema,
-                    ingested_at,
-                )
+                    handler.write_parquet(rows, schema, ingested_at)
 
-                generated_files.add(writer.where)
+                    generated_files.add(handler.writer.where)
+
+                batches_processed += 1
+                rows_processed += len(batch)
+            except Exception:
+                failed_batch = batch_number
+                raise
 
         elapsed = time.perf_counter() - start
-        logger.info("extraction runtime: %.2fs", elapsed)
-
-        success = True
-    except RuntimeError as exc:
-        logger.error("Extraction failed for table '%s': %s", table_name, exc)
-        logger.error(
-            "extraction failed for table '%s' at batch %d after extracting %d rows",
-            table_name,
-            batch_counter,
-            total,
+        logger.info(
+            "extraction ok | batches=%d rows=%d runtime=%.2fs",
+            batches_processed,
+            rows_processed,
+            elapsed,
         )
+
+        return generated_files
+    except RuntimeError:
+        logger.exception(
+            "extraction failed at batch=%s | batches_ok=%d rows_ok=%d",
+            failed_batch,
+            batches_processed,
+            rows_processed,
+        )
+        return set()  # INFO: return an empty set to indicate failure
     finally:
-        for writer in writers.values():
-            writer.close()
-
-    if not success:
-        return set()
-
-    return generated_files
+        pa_manager.close_all()

@@ -18,16 +18,15 @@ def extract_table(
     table: str,
     batch_size: int = BATCH_SIZE,
 ) -> Iterator[list[tuple]]:
-    if batch_size <= 0:
-        raise ValueError("batch_size must be greater than 0")
-
-    logger.info(f"extracting table '{table}'")
-
     """Yield all rows from a table in batches using a server-side (named) cursor.
 
     Args:
         batch_size: rows per yielded batch (default 10k).
     """
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than 0")
+
+    logger.info(f"extracting table '{table}'")
     with get_connection() as conn:
         with conn.cursor(name=f"extract_{table}") as cur:
             cur.itersize = batch_size
