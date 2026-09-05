@@ -22,6 +22,13 @@ def get_s3_client():
 
 
 def ensure_bucket(client, bucket_name: str) -> None:
+    """
+    Ensure that a bucket exists in an S3-compatible storage (MinIO by default).
+
+    :param client: S3 client
+    :param bucket_name: Name of the bucket to ensure exists
+    """
+
     try:
         client.head_bucket(Bucket=bucket_name)
     except ClientError as exc:
@@ -41,15 +48,37 @@ def upload_file(
     """
     Upload a file to an S3-compatible bucket (MinIO by default).
 
+    :param client: S3 client
     :param file_path: Path to the file to upload
     :param bucket_name: Name of the bucket to upload to
     :param object_name: Key of the object in the bucket
     """
-    logger.info("Uploading %s -> s3://%s/%s", file_path, bucket_name, object_name)
-
     try:
+        logger.info("Uploading %s", file_path)
+        exists = object_exists(client, bucket_name, object_name)
+
+        if exists:
+            logger.warning(
+                "Object '%s' exists in bucket '%s', overwriting.",
+                object_name,
+                bucket_name,
+            )
+        else:
+            logger.info(
+                "Object '%s' doesn't exist in bucket '%s', proceeding with upload.",
+                object_name,
+                bucket_name,
+            )
+
         client.upload_file(str(file_path), bucket_name, object_name)
-        logger.info("Uploaded %s -> s3://%s/%s", file_path, bucket_name, object_name)
+
+        logger.info(
+            "%s %s -> s3://%s/%s",
+            "Overwrited" if exists else "Uploaded",
+            file_path,
+            bucket_name,
+            object_name,
+        )
     except ClientError:
         logger.exception("Failed to upload %s", file_path)
         raise
@@ -59,6 +88,7 @@ def object_exists(client, bucket_name: str, object_name: str) -> bool:
     """
     Check if an object exists in an S3-compatible bucket.
 
+    :param client: S3 client
     :param bucket_name: Name of the bucket
     :param object_name: Key of the object in the bucket
     :return: True if the object exists, False otherwise
