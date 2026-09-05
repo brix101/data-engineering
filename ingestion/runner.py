@@ -1,15 +1,12 @@
 import logging
-import os
+import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pyarrow.parquet as pq
-
 from ingestion.entract import extract_table
 from ingestion.parquet import write_parquet_batch
 from ingestion.partition import (
-    build_object_key,
     get_or_create_writer,
     get_partition,
     group_by_partition,
@@ -19,7 +16,6 @@ from ingestion.storage import (
     ensure_bucket,
     get_s3_client,
     object_exists,
-    upload_bucket_file,
     upload_file,
 )
 from ingestion.validate import (
@@ -153,7 +149,7 @@ def ingest_table(
     primary_key: str,
     required_columns: list[str],
     partition_column: str | None = None,
-) -> None:
+) -> set[Path]:
     start = time.perf_counter()
     logger.info(
         "Ingesting table '%s' partitioned by '%s'", table_name, partition_column
@@ -168,16 +164,18 @@ def ingest_table(
 
     except ValueError as exc:
         logger.error("Validation failed for table '%s': %s", table_name, exc)
-        return
+        return set()
 
     schema = TABLE_SCHEMAS.get(table_name)
     if schema is None:
         logger.error("No schema defined for table '%s'", table_name)
-        return
+        return set()
 
     total = 0
     batch_counter = 0
     writers = {}
+    generated_files = set()
+    success = False
 
     try:
         ingested_at = datetime.now(timezone.utc)
@@ -185,6 +183,10 @@ def ingest_table(
         for batch in extract_table(table_name):
             batch_counter += 1
             total += len(batch)
+
+            # Simulate a random batch failure for testing failure handling.
+            # if random.random() < 0.1:
+            #     raise RuntimeError(f"simulated random failure at batch {batch_counter}")
 
             if partition_column is None:
                 # No natural event time -> bucket the whole batch by ingested_at.
@@ -210,16 +212,12 @@ def ingest_table(
                     ingested_at,
                 )
 
-        # upload_file(output_file, "ecommerce-data", output_name)
-
-        # exists = object_exists("ecommerce-data", output_name)
-
-        # if exists:
-        #     logger.info("removing local Parquet file '%s'", output_file)
-        #     os.remove(output_file)
+                generated_files.add(writer.where)
 
         elapsed = time.perf_counter() - start
         logger.info("extraction runtime: %.2fs", elapsed)
+
+        success = True
     except RuntimeError as exc:
         logger.error("Extraction failed for table '%s': %s", table_name, exc)
         logger.error(
@@ -232,31 +230,33 @@ def ingest_table(
         for writer in writers.values():
             writer.close()
 
+    if not success:
+        return set()
+
+    return generated_files
+
 
 if __name__ == "__main__":
-    # for table_name, config in TABLE_CONFIG.items():
-    #     if table_name != "orders":  # Skip orders table for now
-    #         continue
-    #
-    #     logger.info(config)
-    #
-    #     ingest_table(
-    #         table_name,
-    #         config["primary_key"],
-    #         config["required_columns"],
-    #         config["partition_column"],
-    #     )
-
     bucket_name = "ecommerce-data"
     client = get_s3_client()
     ensure_bucket(client, bucket_name)
 
-    for file_path in Path("data/parquet").rglob("*.parquet"):
-        relative_path = file_path.relative_to("data/parquet")
-        object_name = relative_path.as_posix()
+    for table_name, config in TABLE_CONFIG.items():
+        if table_name != "orders":  # Skip orders table for now
+            continue
 
-        upload_file(client, bucket_name, file_path, object_name)
+        generated_files = ingest_table(
+            table_name,
+            config["primary_key"],
+            config["required_columns"],
+            config["partition_column"],
+        )
 
-        if object_exists(client, bucket_name, object_name):
-            logger.info("removing '%s'", file_path)
-            file_path.unlink()
+        for file_path in generated_files:
+            relative_path = file_path.relative_to("data/parquet")
+            object_name = relative_path.as_posix()
+            upload_file(client, bucket_name, file_path, object_name)
+
+            if object_exists(client, bucket_name, object_name):
+                logger.info("removing '%s'", file_path)
+                file_path.unlink()

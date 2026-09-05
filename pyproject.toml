@@ -1,8 +1,22 @@
+[tool.ruff]
+extend-exclude = [
+    "**/*.parquet",
+    "data",
+    ".venv",
+    "__pycache__",
+]
+
 [tool.ruff.lint]
 ignore = ["SIM117"]
 
 [tool.pyright]
 include = ["generator", "ingestion"]
+exclude = [
+    "**/*.parquet",
+    "**/__pycache__",
+    ".venv",
+    "data",
+]
 extraPaths = ["."]
 venvPath = "."
 venv = ".venv"
