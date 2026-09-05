@@ -10,7 +10,7 @@ extend-exclude = [
 ignore = ["SIM117"]
 
 [tool.pyright]
-include = ["generator", "ingestion"]
+include = ["generator", "ingestion", "analytics"]
 exclude = [
     "**/*.parquet",
     "**/__pycache__",
